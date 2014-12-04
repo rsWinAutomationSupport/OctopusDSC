@@ -233,7 +233,7 @@ function Get-MyPublicIPAddress
 {
     Write-Verbose "Getting public IP address"
     $downloader = new-object System.Net.WebClient
-    $ip = $downloader.DownloadString("http://ifconfig.me/ip")
+    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
     return $ip
 }
  
