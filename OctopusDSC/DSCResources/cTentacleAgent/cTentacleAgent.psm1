@@ -18,6 +18,8 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort
+        [bool]$InitialDeploy
+        [string]$DeployProject
     )
 
     Write-Verbose "Checking if Tentacle is installed"
@@ -77,11 +79,18 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933
-    )
+        [bool]$InitialDeploy = $false
+        [string]$DeployProject
+   )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
     {
         throw "Invalid configuration: service cannot be both 'Absent' and 'Started'"
+    }
+
+    if ( (-not $InitialDeploy) -and $DeployProject)
+    {
+        throw "Invalid configuration: Resource set to not do initial deploy but Project to deploy to specified"
     }
 
     $currentResource = (Get-TargetResource -Name $Name)
@@ -126,6 +135,7 @@ function Set-TargetResource
         Write-Verbose "Installing Tentacle..."
         New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
+        Do-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
     }
 
     if ($State -eq "Started" -and $currentResource["State"] -eq "Stopped") 
@@ -157,6 +167,8 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort
+        [bool]$InitialDeploy
+        [string]$DeployProject
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -345,5 +357,56 @@ function Remove-TentacleRegistration
     {
         Write-Verbose "Could not find Tentacle.exe"
     }
+}
+
+function Do-InitialDeploy
+{
+    param (
+        [Parameter(Mandatory=$True)]
+        [string]$name,
+        [Parameter(Mandatory=$True)]
+        [string]$apiKey,
+        [Parameter(Mandatory=$True)]
+        [string]$octopusServerUrl,
+        [Parameter(Mandatory=$True)]
+        [string]$Project,
+        [Parameter(Mandatory=$True)]
+        [string[]]$Environments,
+        [bool]$Wait = $true
+    )
+
+    $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
+    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\initial.txt")
+    {
+        Write-Host "Initial Deployment already done, nothing to do"
+        return
+    }
+
+    if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\Octo.exe"))
+    {
+        if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools.zip"))
+        {
+            Write-Verbose "Downloading OctopusTools from $octoDL"
+            Request-File -url $octoDL -saveAs "$($env:SystemDrive)\Octopus\OctopusTools.zip"
+        }
+        Write-Verbose "Unpacking OctopusTools to $($env:SystemDrive)\Octopus\OctopusTools\"
+        Add-Type -assemblyname System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory("$($env:SystemDrive)\Octopus\OctopusTools.zip","$($env:SystemDrive)\Octopus\OctopusTools\")
+
+    }
+    pushd "$($env:SystemDrive)\Octopus\OctopusTools\"
+    foreach ($environment in $environments)
+    {
+        Write-Verbose "Deploying Project $Project to environment $environment"
+        $deployArguments = @("deploy-release", "--project", $Project, "--deployto", $environment, "--releaseNumber", "latest", "--specificmachines", $env:COMPUTERNAME, "--server", $octopusServerUrl, "--apiKey", $apiKey)
+        if ($Wait)
+        {
+            $deployArguments += "--waitfordeployment"
+        }
+        Invoke-AndAssert { & .\octo.exe $deployArguments}
+    }
+    Invoke-AndAssert { & .\octo.exe }
+    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\initial.txt"
+
 }
 
