@@ -12,6 +12,6 @@ class cTentacleAgent : OMI_BaseResource
   [Write] UInt32 ListenPort;
   [Write] string DefaultApplicationDirectory;
 
-  [Write] bool InitialDeploy;
+  [Write] boolean InitialDeploy;
   [Write] string DeployProject;
 };
