@@ -17,8 +17,8 @@ function Get-TargetResource
         [string[]]$Environments,
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
-        [int]$ListenPort
-        [bool]$InitialDeploy
+        [int]$ListenPort,
+        [bool]$InitialDeploy,
         [string]$DeployProject
     )
 
@@ -78,8 +78,8 @@ function Set-TargetResource
         [string[]]$Environments,
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
-        [int]$ListenPort = 10933
-        [bool]$InitialDeploy = $false
+        [int]$ListenPort = 10933,
+        [bool]$InitialDeploy = $false,
         [string]$DeployProject
    )
 
@@ -166,8 +166,8 @@ function Test-TargetResource
         [string[]]$Environments,
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
-        [int]$ListenPort
-        [bool]$InitialDeploy
+        [int]$ListenPort,
+        [bool]$InitialDeploy,
         [string]$DeployProject
     )
  
