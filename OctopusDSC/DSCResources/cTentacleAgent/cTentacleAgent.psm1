@@ -135,7 +135,6 @@ function Set-TargetResource
         Write-Verbose "Installing Tentacle..."
         New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
-        Do-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
     }
 
     if ($State -eq "Started" -and $currentResource["State"] -eq "Stopped") 
@@ -143,6 +142,10 @@ function Set-TargetResource
         $serviceName = (Get-TentacleServiceName $Name)
         Write-Verbose "Starting $serviceName"
         Start-Service -Name $serviceName
+    }
+    if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
+    {
+        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
     }
 
     Write-Verbose "Finished"
@@ -359,7 +362,7 @@ function Remove-TentacleRegistration
     }
 }
 
-function Do-InitialDeploy
+function Invoke-InitialDeploy
 {
     param (
         [Parameter(Mandatory=$True)]
@@ -372,13 +375,13 @@ function Do-InitialDeploy
         [string]$Project,
         [Parameter(Mandatory=$True)]
         [string[]]$Environments,
-        [bool]$Wait = $true
+        [Switch]$Wait = $true
     )
 
     $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
-    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\initial.txt")
+    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$name_initial.txt")
     {
-        Write-Host "Initial Deployment already done, nothing to do"
+        Write-Host "Initial Deployment for $name already done, nothing to do"
         return
     }
 
@@ -406,7 +409,7 @@ function Do-InitialDeploy
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
     Invoke-AndAssert { & .\octo.exe }
-    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\initial.txt"
+    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$name_initial.txt"
 
 }
 
