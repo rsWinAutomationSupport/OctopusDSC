@@ -379,7 +379,7 @@ function Invoke-InitialDeploy
     )
 
     $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
-    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$name_initial.txt")
+    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($name)_initial.txt")
     {
         Write-Host "Initial Deployment for $name already done, nothing to do"
         return
@@ -408,8 +408,6 @@ function Invoke-InitialDeploy
         }
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
-    Invoke-AndAssert { & .\octo.exe }
-    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$name_initial.txt"
-
+    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($name)_initial.txt"
 }
 
