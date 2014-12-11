@@ -14,4 +14,5 @@ class cTentacleAgent : OMI_BaseResource
 
   [Write] boolean InitialDeploy;
   [Write] string DeployProject;
+  [Write] string DeployVersion;
 };

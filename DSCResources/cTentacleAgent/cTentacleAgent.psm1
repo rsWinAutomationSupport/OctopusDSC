@@ -19,7 +19,8 @@ function Get-TargetResource
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
         [bool]$InitialDeploy,
-        [string]$DeployProject
+        [string]$DeployProject,
+        [string]$DeployVersion
     )
 
     Write-Verbose "Checking if Tentacle is installed"
@@ -80,7 +81,8 @@ function Set-TargetResource
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
         [bool]$InitialDeploy = $false,
-        [string]$DeployProject
+        [string]$DeployProject,
+        [string]$DeployVersion
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -88,9 +90,9 @@ function Set-TargetResource
         throw "Invalid configuration: service cannot be both 'Absent' and 'Started'"
     }
 
-    if ( (-not $InitialDeploy) -and $DeployProject)
+    if ( (-not $InitialDeploy) -and ($DeployProject -or $DeployVersion))
     {
-        throw "Invalid configuration: Resource set to not do initial deploy but Project to deploy to specified"
+        throw "Invalid configuration: Resource set to not do initial deploy but Project and/or Version to deploy to specified"
     }
 
     $currentResource = (Get-TargetResource -Name $Name)
@@ -145,7 +147,14 @@ function Set-TargetResource
     }
     if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
     {
-        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
+        if ($DeployVersion)
+        {
+            Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
+        }
+        else
+        {
+            Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
+        }
     }
 
     Write-Verbose "Finished"
@@ -171,7 +180,8 @@ function Test-TargetResource
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
         [bool]$InitialDeploy,
-        [string]$DeployProject
+        [string]$DeployProject,
+        [string]$DeployVersion
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -375,6 +385,7 @@ function Invoke-InitialDeploy
         [string]$Project,
         [Parameter(Mandatory=$True)]
         [string[]]$Environments,
+        [string]$Version = "latest",
         [Switch]$Wait = $true
     )
 
@@ -401,7 +412,7 @@ function Invoke-InitialDeploy
     foreach ($environment in $environments)
     {
         Write-Verbose "Deploying Project $Project to environment $environment"
-        $deployArguments = @("deploy-release", "--project", $Project, "--deployto", $environment, "--releaseNumber", "latest", "--specificmachines", $env:COMPUTERNAME, "--server", $octopusServerUrl, "--apiKey", $apiKey)
+        $deployArguments = @("deploy-release", "--project", $Project, "--deployto", $environment, "--releaseNumber", $Version, "--specificmachines", $env:COMPUTERNAME, "--server", $octopusServerUrl, "--apiKey", $apiKey)
         if ($Wait)
         {
             $deployArguments += "--waitfordeployment"
