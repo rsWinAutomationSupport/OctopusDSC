@@ -13,6 +13,6 @@ class cTentacleAgent : OMI_BaseResource
   [Write] string DefaultApplicationDirectory;
 
   [Write] boolean InitialDeploy;
-  [Write] string DeployProject;
-  [Write] string DeployVersion[];
+  [Write] string DeployProject[];
+  [Write] string DeployVersion;
 };
