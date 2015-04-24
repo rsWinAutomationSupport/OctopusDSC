@@ -182,7 +182,7 @@ function Test-TargetResource
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
         [bool]$InitialDeploy,
-        [string]$DeployProject,
+        [string[]]$DeployProject,
         [string]$DeployVersion
     )
  
