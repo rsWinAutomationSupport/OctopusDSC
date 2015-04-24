@@ -19,7 +19,7 @@ function Get-TargetResource
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
         [bool]$InitialDeploy,
-        [string]$DeployProject,
+        [string[]]$DeployProject,
         [string]$DeployVersion
     )
 
@@ -81,7 +81,7 @@ function Set-TargetResource
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
         [bool]$InitialDeploy = $false,
-        [string]$DeployProject,
+        [string[]]$DeployProject,
         [string]$DeployVersion
    )
 
@@ -147,14 +147,16 @@ function Set-TargetResource
     }
     if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
     {
-        if ($DeployVersion)
-        {
-            Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
-        }
-        else
-        {
-            Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
-        }
+        foreach($project in $DeployProject){
+			if ($DeployVersion -and $DeployProject.count -eq 1)
+			{
+				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Version $DeployVersion -Wait
+			}
+			else
+			{
+				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Wait
+			}
+		}
     }
 
     Write-Verbose "Finished"
@@ -390,9 +392,9 @@ function Invoke-InitialDeploy
     )
 
     $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
-    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($name)_initial.txt")
+    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt")
     {
-        Write-Verbose "Initial Deployment for $name already done, nothing to do"
+        Write-Verbose "Initial Deployment for $Project already done, nothing to do"
         return
     }
 
@@ -419,6 +421,6 @@ function Invoke-InitialDeploy
         }
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
-    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($name)_initial.txt"
+    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
 }
 
