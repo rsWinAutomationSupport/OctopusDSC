@@ -18,6 +18,7 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
+        [string]$RegisteredNic,
         [bool]$InitialDeploy,
         [string[]]$DeployProject,
         [string]$DeployVersion
@@ -80,6 +81,7 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
+        [string]$RegisteredNic,
         [bool]$InitialDeploy = $false,
         [string[]]$DeployProject,
         [string]$DeployVersion
@@ -135,7 +137,7 @@ function Set-TargetResource
     elseif ($Ensure -eq "Present" -and $currentResource["Ensure"] -eq "Absent") 
     {
         Write-Verbose "Installing Tentacle..."
-        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
+        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -RegisteredNic $RegisteredNic -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
     }
 
@@ -181,6 +183,7 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
+        [string]$RegisteredNic,
         [bool]$InitialDeploy,
         [string[]]$DeployProject,
         [string]$DeployVersion
@@ -244,11 +247,12 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress
+function Get-MyPublicIPAddress([string]$RegisteredNic)
 {
-    Write-Verbose "Getting public IP address"
-    $downloader = new-object System.Net.WebClient
-    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
+    Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
+    $ip = Get-NetIPAddress -InterfaceAlias $RegisteredNic -AddressFamily IPv4 | select -exp IPAddress
+    <#$downloader = new-object System.Net.WebClient
+    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()#>
     return $ip
 }
  
@@ -266,6 +270,7 @@ function New-Tentacle
         [Parameter(Mandatory=$True)]
         [string[]]$roles,
         [int] $port,
+        [string]$RegisteredNic,
         [string]$DefaultApplicationDirectory
     )
  
@@ -303,8 +308,8 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress
-    $ipAddress = $ipAddress.Trim()
+    $ipAddress = Get-MyPublicIPAddress $RegisteredNic
+    #$ipAddress = $ipAddress.Trim()
  
     Write-Verbose "Public IP address: $ipAddress"
     Write-Verbose "Configuring and registering Tentacle"
