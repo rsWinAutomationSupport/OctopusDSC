@@ -93,7 +93,7 @@ function Set-TargetResource{
         [Switch]$Wait = $true
     )
 
-    if ($DeployVersion -and $DeployProject){
+    if ($DeployVersion -ne "latest"){
         Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
     }
 	else{
