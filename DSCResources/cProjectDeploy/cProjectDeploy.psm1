@@ -51,9 +51,14 @@ function Get-TargetResource{
         [string]$DeployProject,
         [Parameter(Mandatory=$True)]
         [string[]]$Environments,
-        [string]$DeployVersion = "latest",
-        [Switch]$Wait = $true
+        [string]$DeployVersion = "latest"
     )
+
+    @{
+        "Environments" = $Environments
+        "Project" = $DeployProject
+        "Project Version" = $DeployVersion
+    }
 }
 function Test-TargetResource{
     param (
@@ -68,8 +73,8 @@ function Test-TargetResource{
         [string]$DeployVersion = "latest",
         [Switch]$Wait = $true
     )
-    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"){
-        Write-Verbose "Initial Deployment for $Project already done, nothing to do"
+    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($DeployProject)_initial.txt"){
+        Write-Verbose "Initial Deployment for $DeployProject already done, nothing to do"
         return $True
     }
     else{return $false}
@@ -89,9 +94,9 @@ function Set-TargetResource{
     )
 
     if ($DeployVersion -and $DeployProject){
-        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Version $DeployVersion -Wait
+        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
     }
 	else{
-        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Wait
+        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
     }
 }

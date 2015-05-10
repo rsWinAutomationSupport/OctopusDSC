@@ -18,10 +18,10 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$InitialDeploy,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
     )
 
     Write-Verbose "Checking if Tentacle is installed"
@@ -81,10 +81,10 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
-        [string]$RegisteredNic,
-        [bool]$InitialDeploy = $false,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy = $false,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -147,7 +147,7 @@ function Set-TargetResource
         Write-Verbose "Starting $serviceName"
         Start-Service -Name $serviceName
     }
-    if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
+    <#if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
     {
         foreach($project in $DeployProject){
 			if ($DeployVersion -and $DeployProject.count -eq 1)
@@ -159,7 +159,7 @@ function Set-TargetResource
 				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Wait
 			}
 		}
-    }
+    }#>
 
     Write-Verbose "Finished"
 }
@@ -183,10 +183,10 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$InitialDeploy,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -379,7 +379,7 @@ function Remove-TentacleRegistration
     }
 }
 
-function Invoke-InitialDeploy
+<#function Invoke-InitialDeploy
 {
     param (
         [Parameter(Mandatory=$True)]
@@ -427,5 +427,5 @@ function Invoke-InitialDeploy
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
     "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
-}
+}#>
 
