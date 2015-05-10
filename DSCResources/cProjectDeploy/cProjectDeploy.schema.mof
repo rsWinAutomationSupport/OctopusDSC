@@ -1,0 +1,12 @@
+[ClassVersion("1.0.0"), FriendlyName("cProjectDeploy")] 
+class cProjectDeploy : OMI_BaseResource
+{
+  [Write] string ApiKey;
+  [Write] string OctopusServerUrl;
+  [Write] string Environments[];
+  [Write] string Roles[];
+  [Write] string DefaultApplicationDirectory;
+
+  [Key] string DeployProject;
+  [Write] string DeployVersion;
+};

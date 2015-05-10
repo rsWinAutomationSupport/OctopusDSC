@@ -18,9 +18,10 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [bool]$InitialDeploy,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
     )
 
     Write-Verbose "Checking if Tentacle is installed"
@@ -80,9 +81,10 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
-        [bool]$InitialDeploy = $false,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy = $false,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -135,7 +137,7 @@ function Set-TargetResource
     elseif ($Ensure -eq "Present" -and $currentResource["Ensure"] -eq "Absent") 
     {
         Write-Verbose "Installing Tentacle..."
-        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
+        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -RegisteredNic $RegisteredNic -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
     }
 
@@ -145,7 +147,7 @@ function Set-TargetResource
         Write-Verbose "Starting $serviceName"
         Start-Service -Name $serviceName
     }
-    if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
+    <#if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
     {
         foreach($project in $DeployProject){
 			if ($DeployVersion -and $DeployProject.count -eq 1)
@@ -157,7 +159,7 @@ function Set-TargetResource
 				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Wait
 			}
 		}
-    }
+    }#>
 
     Write-Verbose "Finished"
 }
@@ -181,9 +183,10 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [bool]$InitialDeploy,
+        [string]$RegisteredNic
+        <#[bool]$InitialDeploy,
         [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$DeployVersion#>
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -244,11 +247,12 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress
+function Get-MyPublicIPAddress([string]$RegisteredNic)
 {
-    Write-Verbose "Getting public IP address"
-    $downloader = new-object System.Net.WebClient
-    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
+    Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
+    $ip = Get-NetIPAddress -InterfaceAlias $RegisteredNic -AddressFamily IPv4 | select -exp IPAddress
+    <#$downloader = new-object System.Net.WebClient
+    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()#>
     return $ip
 }
  
@@ -266,6 +270,7 @@ function New-Tentacle
         [Parameter(Mandatory=$True)]
         [string[]]$roles,
         [int] $port,
+        [string]$RegisteredNic,
         [string]$DefaultApplicationDirectory
     )
  
@@ -303,8 +308,8 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress
-    $ipAddress = $ipAddress.Trim()
+    $ipAddress = Get-MyPublicIPAddress $RegisteredNic
+    #$ipAddress = $ipAddress.Trim()
  
     Write-Verbose "Public IP address: $ipAddress"
     Write-Verbose "Configuring and registering Tentacle"
@@ -374,7 +379,7 @@ function Remove-TentacleRegistration
     }
 }
 
-function Invoke-InitialDeploy
+<#function Invoke-InitialDeploy
 {
     param (
         [Parameter(Mandatory=$True)]
@@ -422,5 +427,5 @@ function Invoke-InitialDeploy
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
     "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
-}
+}#>
 

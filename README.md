@@ -42,6 +42,36 @@ Start-DscConfiguration .\SampleConfig -Verbose -wait
 Test-DscConfiguration
 ```
 
+## Deploying Projects
+```
+Configuration SampleConfig
+{
+    param ($ApiKey, $OctopusServerUrl, $DeployProject, $DeployVersion, $Environments, $Roles, $ListenPort)
+ 
+    Import-DscResource -Module OctopusDSC
+ 
+    Node "localhost"
+	{
+		cProjectDeploy SampleProject
+		{
+			ApiKey = $ApiKey
+			OctopusServerUrl = $OctopusServerUrl
+			DeployProject = $DeployProject
+			Environments = $Environments
+			DeployVersion = $DeployVersion
+		}
+	}
+}
+
+SampleConfig -ApiKey "API-ABCDEF12345678910" -OctopusServerUrl "https://demo.octopusdeploy.com/" -DeployProject "DotNet Project" -DeployVersion "1.0.3" -Environments @("Development") -Roles @("web-server", "app-server") -ListenPort 10933
+
+Start-DscConfiguration .\SampleConfig -Verbose -wait
+
+Test-DscConfiguration
+```
+
+Repeat this config block as many times as necessary to deploy all projects.
+
 ## Settings
 
 When `Ensure` is set to `Present`, the resource will:
