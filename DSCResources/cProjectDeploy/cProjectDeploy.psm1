@@ -1,3 +1,12 @@
+function Invoke-AndAssert {
+    param ($block) 
+  
+    & $block | Write-Verbose
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) 
+    {
+        throw "Command returned exit code $LASTEXITCODE"
+    }
+}
 function Invoke-InitialDeploy{
     param (
         [Parameter(Mandatory=$True)]
@@ -15,10 +24,6 @@ function Invoke-InitialDeploy{
     )
 
     $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
-    <#if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"){
-        Write-Verbose "Initial Deployment for $Project already done, nothing to do"
-        return
-    }#>
 
     if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\Octo.exe")){
         if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools.zip")){
@@ -39,7 +44,7 @@ function Invoke-InitialDeploy{
         }
         Invoke-AndAssert { & .\octo.exe $deployArguments}
     }
-    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
+    "$($Version)" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
 }
 function Get-TargetResource{
     param (
@@ -74,8 +79,11 @@ function Test-TargetResource{
         [Switch]$Wait = $true
     )
     if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($DeployProject)_initial.txt"){
-        Write-Verbose "Initial Deployment for $DeployProject already done, nothing to do"
-        return $True
+        if((gc "$($env:SystemDrive)\Octopus\OctopusTools\$($DeployProject)_initial.txt") -eq $DeployVersion){
+            Write-Verbose "Initial Deployment for $DeployProject already done, nothing to do"
+            return $True
+        }
+        else{Return $false}
     }
     else{return $false}
 }
