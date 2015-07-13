@@ -7,10 +7,19 @@ function Invoke-AndAssert {
         throw "Command returned exit code $LASTEXITCODE"
     }
 }
+function Request-File 
+{
+    param (
+        [string]$url,
+        [string]$saveAs
+    )
+ 
+    Write-Verbose "Downloading $url to $saveAs"
+    $downloader = new-object System.Net.WebClient
+    $downloader.DownloadFile($url, $saveAs)
+}
 function Invoke-InitialDeploy{
     param (
-        [Parameter(Mandatory=$True)]
-        [string]$name,
         [Parameter(Mandatory=$True)]
         [string]$apiKey,
         [Parameter(Mandatory=$True)]
@@ -102,9 +111,9 @@ function Set-TargetResource{
     )
 
     if ($DeployVersion -ne "latest"){
-        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
+        Invoke-InitialDeploy -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Version $DeployVersion -Wait
     }
 	else{
-        Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
+        Invoke-InitialDeploy -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $DeployProject -Wait
     }
 }

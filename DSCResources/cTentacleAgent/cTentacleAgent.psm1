@@ -247,6 +247,10 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     }
 
     #Test the connection to the Octopus Server. If it is not reachable, throw an error
+    $urlRegex = ‘([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?’
+    if($OctopusServerUrl -match $urlRegex){
+        $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
+    }
     $adapterTest = Test-NetConnection $OctopusServerUrl -Port $port
     if(!($adapterTest.TcpTestSucceeded -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
