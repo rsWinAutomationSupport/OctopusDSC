@@ -13,24 +13,25 @@ Configuration SampleConfig
  
     Node "localhost"
     {
-        cTentacleAgent OctopusTentacle 
-        { 
-            Ensure = "Present"; 
-            State = "Started"; 
- 
+        cTentacleAgent OctopusTentacle{ 
+            Ensure = "Present" 
+            State = "Started"
+
             # Tentacle instance name. Leave it as 'Tentacle' unless you have more 
             # than one instance
-            Name = "Tentacle";
- 
+            Name = "Tentacle"
+
             # Registration - all parameters required
-            ApiKey = $ApiKey;
-            OctopusServerUrl = $OctopusServerUrl;
-            Environments = $Environments;
-            Roles = $Roles;
- 
+            ApiKey = "API-ABCDEF12345678910"
+            OctopusServerUrl = "https://demo.octopusdeploy.com/"
+            Environments = "Staging"
+            Roles = @("web-server", "app-server")
+
             # Optional settings
-            ListenPort = $ListenPort;
-            DefaultApplicationDirectory = "C:\Applications"
+            ListenPort = 10933
+            RegisteredNic = "Public"
+            isNatted = $false
+            DefaultApplicationDirectory = "C:\Octopus"
         }
     }
 }
@@ -52,14 +53,13 @@ Configuration SampleConfig
  
     Node "localhost"
 	{
-		cProjectDeploy SampleProject
-		{
-			ApiKey = $ApiKey
-			OctopusServerUrl = $OctopusServerUrl
-			DeployProject = $DeployProject
-			Environments = $Environments
-			DeployVersion = $DeployVersion
-		}
+		cProjectDeploy Config{
+            ApiKey = "API-ABCDEF12345678910"
+            OctopusServerUrl = "https://demo.octopusdeploy.com/"
+            DeployProject = "Sample Project"
+            Environments = "Staging"
+            DeployVersion = "1.1.0.121"
+        }
 	}
 }
 
