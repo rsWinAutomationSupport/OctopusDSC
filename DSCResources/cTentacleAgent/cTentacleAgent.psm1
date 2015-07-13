@@ -18,9 +18,8 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [bool]$InitialDeploy,
-        [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$RegisteredNic,
+        [bool]$isNatted=$false
     )
 
     Write-Verbose "Checking if Tentacle is installed"
@@ -80,9 +79,8 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
-        [bool]$InitialDeploy = $false,
-        [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$RegisteredNic,
+        [bool]$isNatted=$false
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -135,7 +133,7 @@ function Set-TargetResource
     elseif ($Ensure -eq "Present" -and $currentResource["Ensure"] -eq "Absent") 
     {
         Write-Verbose "Installing Tentacle..."
-        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
+        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -RegisteredNic $RegisteredNic -isNatted $isNatted -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
     }
 
@@ -144,19 +142,6 @@ function Set-TargetResource
         $serviceName = (Get-TentacleServiceName $Name)
         Write-Verbose "Starting $serviceName"
         Start-Service -Name $serviceName
-    }
-    if ($State -eq "Started" -and $Ensure -eq "Present" -and $InitialDeploy)
-    {
-        foreach($project in $DeployProject){
-			if ($DeployVersion -and $DeployProject.count -eq 1)
-			{
-				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Version $DeployVersion -Wait
-			}
-			else
-			{
-				Invoke-InitialDeploy -name $Name -apiKey $ApiKey -octopusServerUrl $octopusServerUrl -Environments $Environments -Project $project -Wait
-			}
-		}
     }
 
     Write-Verbose "Finished"
@@ -181,9 +166,8 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [bool]$InitialDeploy,
-        [string[]]$DeployProject,
-        [string]$DeployVersion
+        [string]$RegisteredNic,
+        [bool]$isNatted=$false
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -244,12 +228,34 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress
-{
-    Write-Verbose "Getting public IP address"
-    $downloader = new-object System.Net.WebClient
-    $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
-    return $ip
+function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl,[int]$port){
+    #First Verify the adapter exists
+    $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
+    if($netAdapter -eq $null){
+        throw "Selected NIC $($RegisteredNic) does not exist"
+    }
+
+    #If adapter is natted, find the actual Public IP
+    if($isNatted){
+        Write-Verbose "NIC $($RegisteredNic) is natted. Determining actual public IP"
+        $downloader = new-object System.Net.WebClient
+        $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
+    }
+    else{
+        Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
+        $ip = Get-NetIPAddress -InterfaceAlias $RegisteredNic -AddressFamily IPv4 | select -exp IPAddress
+    }
+
+    #Test the connection to the Octopus Server. If it is not reachable, throw an error
+    $urlRegex = ‘([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?’
+    if($OctopusServerUrl -match $urlRegex){
+        $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
+    }
+    $adapterTest = Test-NetConnection $OctopusServerUrl -Port $port
+    if(!($adapterTest.TcpTestSucceeded -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
+        throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
+    }
+    else{return $ip}
 }
  
 function New-Tentacle 
@@ -266,6 +272,8 @@ function New-Tentacle
         [Parameter(Mandatory=$True)]
         [string[]]$roles,
         [int] $port,
+        [string]$RegisteredNic,
+        [bool]$isNatted=$false,
         [string]$DefaultApplicationDirectory
     )
  
@@ -303,8 +311,7 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress
-    $ipAddress = $ipAddress.Trim()
+    $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl -port $port
  
     Write-Verbose "Public IP address: $ipAddress"
     Write-Verbose "Configuring and registering Tentacle"
@@ -373,54 +380,3 @@ function Remove-TentacleRegistration
         Write-Verbose "Could not find Tentacle.exe"
     }
 }
-
-function Invoke-InitialDeploy
-{
-    param (
-        [Parameter(Mandatory=$True)]
-        [string]$name,
-        [Parameter(Mandatory=$True)]
-        [string]$apiKey,
-        [Parameter(Mandatory=$True)]
-        [string]$octopusServerUrl,
-        [Parameter(Mandatory=$True)]
-        [string]$Project,
-        [Parameter(Mandatory=$True)]
-        [string[]]$Environments,
-        [string]$Version = "latest",
-        [Switch]$Wait = $true
-    )
-
-    $octoDL = "http://download.octopusdeploy.com/octopus-tools/2.5.10.39/OctopusTools.2.5.10.39.zip"
-    if (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt")
-    {
-        Write-Verbose "Initial Deployment for $Project already done, nothing to do"
-        return
-    }
-
-    if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools\Octo.exe"))
-    {
-        if ( -not (Test-Path "$($env:SystemDrive)\Octopus\OctopusTools.zip"))
-        {
-            Write-Verbose "Downloading OctopusTools from $octoDL"
-            Request-File -url $octoDL -saveAs "$($env:SystemDrive)\Octopus\OctopusTools.zip"
-        }
-        Write-Verbose "Unpacking OctopusTools to $($env:SystemDrive)\Octopus\OctopusTools\"
-        Add-Type -assemblyname System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::ExtractToDirectory("$($env:SystemDrive)\Octopus\OctopusTools.zip","$($env:SystemDrive)\Octopus\OctopusTools\")
-
-    }
-    pushd "$($env:SystemDrive)\Octopus\OctopusTools\"
-    foreach ($environment in $environments)
-    {
-        Write-Verbose "Deploying Project $Project to environment $environment"
-        $deployArguments = @("deploy-release", "--project", $Project, "--deployto", $environment, "--releaseNumber", $Version, "--specificmachines", $env:COMPUTERNAME, "--server", $octopusServerUrl, "--apiKey", $apiKey)
-        if ($Wait)
-        {
-            $deployArguments += "--waitfordeployment"
-        }
-        Invoke-AndAssert { & .\octo.exe $deployArguments}
-    }
-    "Done" | Out-File "$($env:SystemDrive)\Octopus\OctopusTools\$($Project)_initial.txt"
-}
-
