@@ -251,8 +251,17 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     if($OctopusServerUrl -match $urlRegex){
         $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
     }
-    $adapterTest = Test-NetConnection $OctopusServerUrl
-    if(!($adapterTest.PingSucceeded -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
+    if($OctopusServerUrl.Contains(":")){
+        $port = $OctopusServerUrl.Split(":")[1]
+        $OctopusServerUrl = $OctopusServerUrl.Split(":")[0]
+        $adapterTest = Test-NetConnection $OctopusServerUrl -port $port
+        $testResult = $adapterTest.TcpTestSucceeded
+    }
+    else{
+        $adapterTest = Test-NetConnection $OctopusServerUrl
+        $testResult = $adapterTest.PingSucceeded
+    }
+    if(!($testResult -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
     else{return $ip}
