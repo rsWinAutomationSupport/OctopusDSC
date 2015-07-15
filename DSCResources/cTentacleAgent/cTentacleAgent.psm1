@@ -228,7 +228,7 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl,[int]$port){
+function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
     #First Verify the adapter exists
     $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
     if($netAdapter -eq $null){
@@ -247,12 +247,21 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     }
 
     #Test the connection to the Octopus Server. If it is not reachable, throw an error
-    $urlRegex = ‘([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?’
+    $urlRegex = â€˜([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?â€™
     if($OctopusServerUrl -match $urlRegex){
         $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
     }
-    $adapterTest = Test-NetConnection $OctopusServerUrl -Port $port
-    if(!($adapterTest.TcpTestSucceeded -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
+    if($OctopusServerUrl.Contains(":")){
+        $port = $OctopusServerUrl.Split(":")[1]
+        $OctopusServerUrl = $OctopusServerUrl.Split(":")[0]
+        $adapterTest = Test-NetConnection $OctopusServerUrl -port $port
+        $testResult = $adapterTest.TcpTestSucceeded
+    }
+    else{
+        $adapterTest = Test-NetConnection $OctopusServerUrl
+        $testResult = $adapterTest.PingSucceeded
+    }
+    if(!($testResult -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
     else{return $ip}
@@ -311,7 +320,7 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl -port $port
+    $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl
  
     Write-Verbose "Public IP address: $ipAddress"
     Write-Verbose "Configuring and registering Tentacle"
