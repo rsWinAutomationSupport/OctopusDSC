@@ -292,30 +292,6 @@ function New-Tentacle
     }
 
     Write-Verbose "Beginning Tentacle installation" 
-  
-    <#$tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle64"
-    if ([IntPtr]::Size -eq 4) 
-    {
-        $tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle"
-    }
-
-    mkdir "$($env:SystemDrive)\Octopus" -ErrorAction SilentlyContinue
-
-    $tentaclePath = "$($env:SystemDrive)\Octopus\Tentacle.msi"
-    if ((test-path $tentaclePath) -ne $true) 
-    {
-        Write-Verbose "Downloading latest Octopus Tentacle MSI from $tentacleDownloadUrl to $tentaclePath"
-        Request-File $tentacleDownloadUrl $tentaclePath
-    }
-  
-    Write-Verbose "Installing MSI..."
-    $msiLog = "$($env:SystemDrive)\Octopus\Tentacle.msi.log"
-    $msiExitCode = (Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $tentaclePath /quiet /l*v $msiLog" -Wait -Passthru).ExitCode
-    Write-Verbose "Tentacle MSI installer returned exit code $msiExitCode"
-    if ($msiExitCode -ne 0) 
-    {
-        throw "Installation of the Tentacle MSI failed; MSIEXEC exited with code: $msiExitCode. View the log at $msiLog"
-    }#>
  
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
