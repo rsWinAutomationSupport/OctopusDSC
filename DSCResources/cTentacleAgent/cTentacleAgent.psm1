@@ -88,10 +88,10 @@ function Set-TargetResource
         throw "Invalid configuration: service cannot be both 'Absent' and 'Started'"
     }
 
-    if ( (-not $InitialDeploy) -and ($DeployProject -or $DeployVersion))
+    <#if ( (-not $InitialDeploy) -and ($DeployProject -or $DeployVersion))
     {
         throw "Invalid configuration: Resource set to not do initial deploy but Project and/or Version to deploy to specified"
-    }
+    }#>
 
     $currentResource = (Get-TargetResource -Name $Name)
 
@@ -293,7 +293,7 @@ function New-Tentacle
 
     Write-Verbose "Beginning Tentacle installation" 
   
-    $tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle64"
+    <#$tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle64"
     if ([IntPtr]::Size -eq 4) 
     {
         $tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle"
@@ -315,7 +315,7 @@ function New-Tentacle
     if ($msiExitCode -ne 0) 
     {
         throw "Installation of the Tentacle MSI failed; MSIEXEC exited with code: $msiExitCode. View the log at $msiLog"
-    }
+    }#>
  
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
