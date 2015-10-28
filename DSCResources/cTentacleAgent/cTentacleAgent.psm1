@@ -1,5 +1,4 @@
-function Get-TargetResource
-{
+function Get-TargetResource{
     [OutputType([Hashtable])]
     param (
         [ValidateSet("Present", "Absent")]
@@ -60,8 +59,7 @@ function Get-TargetResource
     };
 }
 
-function Set-TargetResource 
-{
+function Set-TargetResource{
     param (       
         [ValidateSet("Present", "Absent")]
         [string]$Ensure = "Present",
@@ -147,8 +145,7 @@ function Set-TargetResource
     Write-Verbose "Finished"
 }
 
-function Test-TargetResource 
-{
+function Test-TargetResource{
     param (       
         [ValidateSet("Present", "Absent")]
         [string]$Ensure = "Present",
@@ -231,7 +228,7 @@ function Invoke-AndAssert {
 function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
     #First Verify the adapter exists
     $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
-    if($netAdapter -eq $null){
+    if($netAdapter -eq $null -and $RegisteredNic -ne "AWSNIC"){
         throw "Selected NIC $($RegisteredNic) does not exist"
     }
 
@@ -240,6 +237,9 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
         Write-Verbose "NIC $($RegisteredNic) is natted. Determining actual public IP"
         $downloader = new-object System.Net.WebClient
         $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
+    }
+    elseif($RegisteredNic -eq "AWSNIC"){
+        $ip = Invoke-WebRequest http://169.254.169.254/latest/meta-data/local-ipv4 | select -exp Content
     }
     else{
         Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
@@ -258,10 +258,10 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
         $testResult = $adapterTest.TcpTestSucceeded
     }
     else{
-        $adapterTest = Test-NetConnection $OctopusServerUrl
-        $testResult = $adapterTest.PingSucceeded
+        $adapterTest = Test-NetConnection $OctopusServerUrl HTTP
+        $testResult = $adapterTest.TcpTestSucceeded
     }
-    if(!($testResult -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
+    if(!($testResult -and (($adapterTest.InterfaceAlias -eq $RegisteredNic) -or $RegisteredNic -eq "AWSNIC"))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
     else{return $ip}
