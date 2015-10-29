@@ -23,7 +23,7 @@ function Get-TargetResource{
 
     Write-Verbose "Checking if Tentacle is installed"
     $installLocation = (get-itemproperty -path "HKLM:\Software\Octopus\Tentacle" -ErrorAction SilentlyContinue).InstallLocation
-    $present = ($installLocation -ne $null)
+    $present = (($installLocation -ne $null) -and (Test-Path "C:\Octopus\Tentacle\Tentacle.config"))
     Write-Verbose "Tentacle present: $present"
     
     $currentEnsure = if ($present) { "Present" } else { "Absent" }
