@@ -48,7 +48,7 @@ Configuration SampleConfig
 
             # Optional settings
             ListenPort = 10933
-            RegisteredNic = "Public"
+            RegisteredNic = "Public" #Use interface name here if you know the name of the interface. If this is an AWS ec2 instance, use AWSNIC as the value and the resource will scrape the machine's metadata
             isNatted = $false
             DefaultApplicationDirectory = "C:\Octopus"
         }

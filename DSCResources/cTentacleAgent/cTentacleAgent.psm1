@@ -226,6 +226,7 @@ function Invoke-AndAssert {
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
 function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
+    $downloader = new-object System.Net.WebClient
     #First Verify the adapter exists
     $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
     if($netAdapter -eq $null -and $RegisteredNic -ne "AWSNIC"){
@@ -235,12 +236,15 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     #If adapter is natted, find the actual Public IP
     if($isNatted){
         Write-Verbose "NIC $($RegisteredNic) is natted. Determining actual public IP"
-        $downloader = new-object System.Net.WebClient
         $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
     }
+    #If this is an AWS Server, using the AWSNIC as your interface name will direct this resource to scrape the machine's metadata for the local IP
     elseif($RegisteredNic -eq "AWSNIC"){
-        $ip = Invoke-WebRequest http://169.254.169.254/latest/meta-data/local-ipv4 | select -exp Content
+        Write-Verbose "Getting IP Address from AWS metadata."
+        $ip = $downloader.DownloadString("http://169.254.169.254/latest/meta-data/local-ipv4").Trim()
+        Write-Verbose "Metadata returned $($ip) as this machine's IP Address."
     }
+    #Otherwise if you know the name of your network interface, this resource will get the IP of the interface that matches the interface name you provided.
     else{
         Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
         $ip = Get-NetIPAddress -InterfaceAlias $RegisteredNic -AddressFamily IPv4 | select -exp IPAddress
@@ -254,13 +258,14 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     if($OctopusServerUrl.Contains(":")){
         $port = $OctopusServerUrl.Split(":")[1]
         $OctopusServerUrl = $OctopusServerUrl.Split(":")[0]
-        $adapterTest = Test-NetConnection $OctopusServerUrl -port $port
+        $adapterTest = Test-NetConnection $OctopusServerUrl -port $port -InformationLevel Detailed
         $testResult = $adapterTest.TcpTestSucceeded
     }
     else{
-        $adapterTest = Test-NetConnection $OctopusServerUrl HTTP
+        $adapterTest = Test-NetConnection $OctopusServerUrl HTTP -InformationLevel Detailed
         $testResult = $adapterTest.TcpTestSucceeded
     }
+    Write-Verbose "The connection test to $($OctopusServerUrl) from $($ip) using the $($RegisteredNic) interface returned: $($testResult)."
     if(!($testResult -and (($adapterTest.InterfaceAlias -eq $RegisteredNic) -or $RegisteredNic -eq "AWSNIC"))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
@@ -297,8 +302,12 @@ function New-Tentacle
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
     $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl
+
+    if($ipAddress -eq $null){
+        throw "I don't have an IP Address to register with"
+    }
  
-    Write-Verbose "Public IP address: $ipAddress"
+    Write-Verbose "Public IP address: $($ipAddress)"
     Write-Verbose "Configuring and registering Tentacle"
   
     pushd "${env:ProgramFiles}\Octopus Deploy\Tentacle"
