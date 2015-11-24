@@ -186,8 +186,7 @@ function Test-TargetResource{
     return $true
 }
 
-function Get-TentacleServiceName 
-{
+function Get-TentacleServiceName{
     param ( [string]$instanceName )
 
     if ($instanceName -eq "Tentacle") 
@@ -200,8 +199,7 @@ function Get-TentacleServiceName
     }
 }
 
-function Request-File 
-{
+function Request-File{
     param (
         [string]$url,
         [string]$saveAs
@@ -212,7 +210,7 @@ function Request-File
     $downloader.DownloadFile($url, $saveAs)
 }
 
-function Invoke-AndAssert {
+function Invoke-AndAssert{
     param ($block) 
   
     & $block | Write-Verbose
@@ -225,7 +223,8 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
+function Get-MyPublicIPAddress([string]$nicType,[string]$nicName,[string]$OctopusServerUrl){
+    
     $downloader = new-object System.Net.WebClient
     #First Verify the adapter exists
     $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
@@ -251,7 +250,8 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     }
 
     #Test the connection to the Octopus Server. If it is not reachable, throw an error
-    $urlRegex = ‘([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?’
+    #$urlRegex = ï¿½([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?ï¿½
+    $urlRegex = "(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)"
     if($OctopusServerUrl -match $urlRegex){
         $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
     }
@@ -272,8 +272,7 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
     else{return $ip}
 }
  
-function New-Tentacle 
-{
+function New-Tentacle{
     param (
         [Parameter(Mandatory=$True)]
         [string]$name,
@@ -301,8 +300,13 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl
-
+    if(($nicType -eq "named") -and ($nicName -ne $null)){
+        $ipAddress = Get-MyPublicIPAddress -nicType $nicType -nicName $nicName -OctopusServerUrl $octopusServerUrl
+    }
+    else{
+        $ipAddress = Get-MyPublicIPAddress -nicType $nicType -OctopusServerUrl $octopusServerUrl
+    }
+    
     if($ipAddress -eq $null){
         throw "I don't have an IP Address to register with"
     }
@@ -349,8 +353,7 @@ function New-Tentacle
 }
 
 
-function Remove-TentacleRegistration 
-{
+function Remove-TentacleRegistration{
     param (
         [Parameter(Mandatory=$True)]
         [string]$name,
