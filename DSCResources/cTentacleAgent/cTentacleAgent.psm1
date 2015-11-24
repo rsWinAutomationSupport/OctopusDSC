@@ -223,7 +223,7 @@ function Invoke-AndAssert{
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress([string]$nicType,[string]$nicName,[string]$OctopusServerUrl){
+function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
     
     $downloader = new-object System.Net.WebClient
     #First Verify the adapter exists
