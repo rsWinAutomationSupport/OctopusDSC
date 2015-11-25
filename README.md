@@ -48,8 +48,8 @@ Configuration SampleConfig
 
             # Optional settings
             ListenPort = 10933
-            RegisteredNic = "Public" #Use interface name here if you know the name of the interface. If this is an AWS ec2 instance, use AWSNIC as the value and the resource will scrape the machine's metadata
-            isNatted = $false
+            nicType = "detect" #This sets the value for what kind of NIC we should expect. "detect" will test the connection to the octopus server and use the NIC that successfully connects, it is the default value. "named" is where you know the name of the NIC and the connection will be tested and verify the NIC named is the one that reached the octopus server. "nicName" variable is required if this is set. "natted" will verify a connection to the octopus server and then it will call a 3rd party service to determine it's public IP
+			nicName #This is only required if nicType is set to "named"
             DefaultApplicationDirectory = "C:\Octopus"
         }
     }
