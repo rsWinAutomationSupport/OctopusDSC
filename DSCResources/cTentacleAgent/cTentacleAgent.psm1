@@ -17,13 +17,16 @@ function Get-TargetResource{
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
     )
 
     Write-Verbose "Checking if Tentacle is installed"
     $installLocation = (get-itemproperty -path "HKLM:\Software\Octopus\Tentacle" -ErrorAction SilentlyContinue).InstallLocation
-    $present = (($installLocation -ne $null) -and (Test-Path "C:\Octopus\Tentacle\Tentacle.config"))
+    $present = (($installLocation -ne $null) -and (Test-Path "C:\Octopus\$($Name)\Tentacle.config"))
     Write-Verbose "Tentacle present: $present"
     
     $currentEnsure = if ($present) { "Present" } else { "Absent" }
@@ -77,8 +80,11 @@ function Set-TargetResource{
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -131,7 +137,7 @@ function Set-TargetResource{
     elseif ($Ensure -eq "Present" -and $currentResource["Ensure"] -eq "Absent") 
     {
         Write-Verbose "Installing Tentacle..."
-        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -RegisteredNic $RegisteredNic -isNatted $isNatted -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
+        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -nicType $nicType -nicName $nicName -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
     }
 
@@ -163,8 +169,11 @@ function Test-TargetResource{
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -223,7 +232,64 @@ function Invoke-AndAssert{
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
+function VerifyConnection{
+    param(
+        $serverAddress,
+        $port
+    )
+
+    Return Test-NetConnection $serverAddress -Port $port -InformationLevel Detailed -Verbose
+}
+function Get-RegistrationIP{
+    param(
+        $nicType,
+        $nicName,
+        $url
+    )
+
+    $urlRegex = "(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)"; $port = $null; $ipAddress = $null
+    if($url -match $urlRegex){
+        $useHttps = ($url.Split("//") | select -First 1) -eq "https:"
+        $serverAddress = $url.Split("//") | select -Last 1
+    }
+    else{$serverAddress = $url}
+    if($serverAddress.Contains(":")){
+        $port = $serverAddress.Split(":")[1]
+        $serverAddress = $serverAddress.Split(":")[0]
+    }
+    if($useHttps -and ($port -eq $null)){$port = 443}
+    elseif($port -eq $null){$port = 80}
+    Write-Verbose "Connection tests will use address $($serverAddress) on port $($port)"
+
+    switch($nicType){
+        "named"{
+            $netAdapter = Get-NetAdapter -InterfaceAlias $nicName -ErrorAction SilentlyContinue
+            if(($netAdapter -eq $null) -or ($netAdapter.Status -ne "Up")){
+                throw "Selected NIC $($nicName) does not exist or does not have a connection to the network."
+            }
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded -and ($testResult.InterfaceAlias -eq $netAdapter.Name)){
+                $ipAddress = (Get-NetIPAddress -InterfaceAlias $netAdapter.Name -AddressFamily IPv4 -SkipAsSource $false -ErrorAction SilentlyContinue).IPv4Address
+            }
+        }
+        "detect"{
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded){
+                $ipAddress = $testResult.SourceAddress.IPv4Address
+            }
+        }
+        "natted"{
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded){
+                $downloader = new-object System.Net.WebClient
+                $ipAddress = $downloader.DownloadString("http://icanhazip.com").Trim()
+            }
+        }
+    }
+
+    Return $ipAddress
+}
+<#function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
     
     $downloader = new-object System.Net.WebClient
     #First Verify the adapter exists
@@ -270,7 +336,7 @@ function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$O
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
     else{return $ip}
-}
+}#>
  
 function New-Tentacle{
     param (
@@ -285,8 +351,11 @@ function New-Tentacle{
         [Parameter(Mandatory=$True)]
         [string[]]$roles,
         [int] $port,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false,
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null,
+        #[string]$RegisteredNic,
+        #[bool]$isNatted=$false,
         [string]$DefaultApplicationDirectory
     )
  
@@ -300,13 +369,8 @@ function New-Tentacle{
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    if(($nicType -eq "named") -and ($nicName -ne $null)){
-        $ipAddress = Get-MyPublicIPAddress -nicType $nicType -nicName $nicName -OctopusServerUrl $octopusServerUrl
-    }
-    else{
-        $ipAddress = Get-MyPublicIPAddress -nicType $nicType -OctopusServerUrl $octopusServerUrl
-    }
-    
+    #$ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl
+    $ipAddress = Get-RegistrationIP -nicType $nicType -nicName $nicName -url $octopusServerUrl    
     if($ipAddress -eq $null){
         throw "I don't have an IP Address to register with"
     }

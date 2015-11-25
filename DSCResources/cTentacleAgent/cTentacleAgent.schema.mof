@@ -10,7 +10,7 @@ class cTentacleAgent : OMI_BaseResource
   [Write] string Environments[];
   [Write] string Roles[];
   [Write] UInt32 ListenPort;
-  [Write] string RegisteredNic;
-  [Write] boolean isNatted;
+  [Write] string nicType;
+  [Write] boolean nicName;
   [Write] string DefaultApplicationDirectory;
 };
