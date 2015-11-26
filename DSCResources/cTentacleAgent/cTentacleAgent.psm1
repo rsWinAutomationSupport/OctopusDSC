@@ -359,8 +359,7 @@ function New-Tentacle{
         [string]$DefaultApplicationDirectory
     )
  
-    if ($port -eq 0) 
-    {
+    if ($port -eq 0){
         $port = 10933
     }
 
@@ -392,18 +391,14 @@ function New-Tentacle{
 
     $registerArguments = @("register-with", "--instance", $name, "--server", $octopusServerUrl, "--name", $env:COMPUTERNAME, "--publicHostName", $ipAddress, "--apiKey", $apiKey, "--comms-style", "TentaclePassive", "--force", "--console")
 
-    foreach ($environment in $environments) 
-    {
-        foreach ($e2 in $environment.Split(',')) 
-        {
+    foreach ($environment in $environments){
+        foreach ($e2 in $environment.Split(',')){
             $registerArguments += "--environment"
             $registerArguments += $e2.Trim()
         }
     }
-    foreach ($role in $roles) 
-    {
-        foreach ($r2 in $role.Split(',')) 
-        {
+    foreach ($role in $roles){
+        foreach ($r2 in $role.Split(',')){
             $registerArguments += "--role"
             $registerArguments += $r2.Trim()
         }
@@ -428,16 +423,14 @@ function Remove-TentacleRegistration{
     )
   
     $tentacleDir = "${env:ProgramFiles}\Octopus Deploy\Tentacle"
-    if ((test-path $tentacleDir) -and (test-path "$tentacleDir\tentacle.exe")) 
-    {
+    if ((test-path $tentacleDir) -and (test-path "$tentacleDir\tentacle.exe")){
         Write-Verbose "Beginning Tentacle deregistration" 
         Write-Verbose "Tentacle commands complete"
         pushd $tentacleDir
         Invoke-AndAssert { & .\tentacle.exe deregister-from --instance "$name" --server $octopusServerUrl --apiKey $apiKey --console }
         popd
     }
-    else 
-    {
+    else{
         Write-Verbose "Could not find Tentacle.exe"
     }
 }
