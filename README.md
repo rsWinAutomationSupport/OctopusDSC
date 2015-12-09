@@ -1,5 +1,24 @@
 This repository contains a PowerShell module with a DSC resource that can be used to install the [Octopus Deploy](http://octopusdeploy.com) Tentacle agent.
 
+## Install Tentacle Package
+Installation of the MSI Package has been extracted from this resource, make use of the Package resource to install as demonstrated below
+
+```
+File OctopusPath{
+	Ensure = "Present"
+	Type = "Directory"
+	DestinationPath = "C:\Octopus"
+}
+Package OctoTentacle{
+	Name = "Octopus Deploy Tentacle"
+	Ensure = "Present"
+	Path = "https://download.octopusdeploy.com/octopus/Octopus.Tentacle.2.6.5.1010-x64.msi"
+	Arguments = "/l*v $($env:SystemDrive)\Octopus\Tentacle.msi.log"
+	ProductId = ""
+	DependsOn = @("[File]OctopusPath")
+}
+```
+
 ## Sample
 
 First, ensure the OctopusDSC module is on your `$env:PSModulePath`. Then you can create and apply configuration like this.
@@ -29,8 +48,8 @@ Configuration SampleConfig
 
             # Optional settings
             ListenPort = 10933
-            RegisteredNic = "Public"
-            isNatted = $false
+            nicType = "detect" #This sets the value for what kind of NIC we should expect. "detect" will test the connection to the octopus server and use the NIC that successfully connects, it is the default value. "named" is where you know the name of the NIC and the connection will be tested and verify the NIC named is the one that reached the octopus server. "nicName" variable is required if this is set. "natted" will verify a connection to the octopus server and then it will call a 3rd party service to determine it's public IP
+			nicName #This is only required if nicType is set to "named"
             DefaultApplicationDirectory = "C:\Octopus"
         }
     }

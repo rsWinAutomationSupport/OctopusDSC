@@ -1,5 +1,4 @@
-function Get-TargetResource
-{
+function Get-TargetResource{
     [OutputType([Hashtable])]
     param (
         [ValidateSet("Present", "Absent")]
@@ -18,13 +17,16 @@ function Get-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
     )
 
     Write-Verbose "Checking if Tentacle is installed"
     $installLocation = (get-itemproperty -path "HKLM:\Software\Octopus\Tentacle" -ErrorAction SilentlyContinue).InstallLocation
-    $present = ($installLocation -ne $null)
+    $present = (($installLocation -ne $null) -and (Test-Path "C:\Octopus\$($Name)\Tentacle.config"))
     Write-Verbose "Tentacle present: $present"
     
     $currentEnsure = if ($present) { "Present" } else { "Absent" }
@@ -60,8 +62,7 @@ function Get-TargetResource
     };
 }
 
-function Set-TargetResource 
-{
+function Set-TargetResource{
     param (       
         [ValidateSet("Present", "Absent")]
         [string]$Ensure = "Present",
@@ -79,8 +80,11 @@ function Set-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory = "$($env:SystemDrive)\Applications",
         [int]$ListenPort = 10933,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
    )
 
     if ($Ensure -eq "Absent" -and $State -eq "Started") 
@@ -88,10 +92,10 @@ function Set-TargetResource
         throw "Invalid configuration: service cannot be both 'Absent' and 'Started'"
     }
 
-    if ( (-not $InitialDeploy) -and ($DeployProject -or $DeployVersion))
+    <#if ( (-not $InitialDeploy) -and ($DeployProject -or $DeployVersion))
     {
         throw "Invalid configuration: Resource set to not do initial deploy but Project and/or Version to deploy to specified"
-    }
+    }#>
 
     $currentResource = (Get-TargetResource -Name $Name)
 
@@ -133,7 +137,7 @@ function Set-TargetResource
     elseif ($Ensure -eq "Present" -and $currentResource["Ensure"] -eq "Absent") 
     {
         Write-Verbose "Installing Tentacle..."
-        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -RegisteredNic $RegisteredNic -isNatted $isNatted -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
+        New-Tentacle -name $Name -apiKey $ApiKey -octopusServerUrl $OctopusServerUrl -port $ListenPort -nicType $nicType -nicName $nicName -environments $Environments -roles $Roles -DefaultApplicationDirectory $DefaultApplicationDirectory
         Write-Verbose "Tentacle installed!"
     }
 
@@ -147,8 +151,7 @@ function Set-TargetResource
     Write-Verbose "Finished"
 }
 
-function Test-TargetResource 
-{
+function Test-TargetResource{
     param (       
         [ValidateSet("Present", "Absent")]
         [string]$Ensure = "Present",
@@ -166,8 +169,11 @@ function Test-TargetResource
         [string[]]$Roles,
         [string]$DefaultApplicationDirectory,
         [int]$ListenPort,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null
+        <#[string]$RegisteredNic,
+        [bool]$isNatted=$false#>
     )
  
     $currentResource = (Get-TargetResource -Name $Name)
@@ -189,8 +195,7 @@ function Test-TargetResource
     return $true
 }
 
-function Get-TentacleServiceName 
-{
+function Get-TentacleServiceName{
     param ( [string]$instanceName )
 
     if ($instanceName -eq "Tentacle") 
@@ -203,8 +208,7 @@ function Get-TentacleServiceName
     }
 }
 
-function Request-File 
-{
+function Request-File{
     param (
         [string]$url,
         [string]$saveAs
@@ -215,7 +219,7 @@ function Request-File
     $downloader.DownloadFile($url, $saveAs)
 }
 
-function Invoke-AndAssert {
+function Invoke-AndAssert{
     param ($block) 
   
     & $block | Write-Verbose
@@ -228,38 +232,113 @@ function Invoke-AndAssert {
 # After the Tentacle is registered with Octopus, Tentacle listens on a TCP port, and Octopus connects to it. The Octopus server
 # needs to know the public IP address to use to connect to this Tentacle instance. Is there a way in Windows Azure in which we can 
 # know the public IP/host name of the current machine?
-function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl,[int]$port){
+function VerifyConnection{
+    param(
+        $serverAddress,
+        $port
+    )
+
+    Return Test-NetConnection $serverAddress -Port $port -InformationLevel Detailed -Verbose
+}
+function Get-RegistrationIP{
+    param(
+        $nicType,
+        $nicName,
+        $url
+    )
+
+    $urlRegex = "(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)"; $port = $null; $ipAddress = $null
+    if($url -match $urlRegex){
+        $useHttps = ($url.Split("//") | select -First 1) -eq "https:"
+        $serverAddress = $url.Split("//") | select -Last 1
+    }
+    else{$serverAddress = $url}
+    if($serverAddress.Contains(":")){
+        $port = $serverAddress.Split(":")[1]
+        $serverAddress = $serverAddress.Split(":")[0]
+    }
+    if($useHttps -and ($port -eq $null)){$port = 443}
+    elseif($port -eq $null){$port = 80}
+    Write-Verbose "Connection tests will use address $($serverAddress) on port $($port)"
+
+    switch($nicType){
+        "named"{
+            $netAdapter = Get-NetAdapter -InterfaceAlias $nicName -ErrorAction SilentlyContinue
+            if(($netAdapter -eq $null) -or ($netAdapter.Status -ne "Up")){
+                throw "Selected NIC $($nicName) does not exist or does not have a connection to the network."
+            }
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded -and ($testResult.InterfaceAlias -eq $netAdapter.Name)){
+                $ipAddress = (Get-NetIPAddress -InterfaceAlias $netAdapter.Name -AddressFamily IPv4 -SkipAsSource $false -ErrorAction SilentlyContinue).IPv4Address
+            }
+        }
+        "detect"{
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded){
+                $ipAddress = $testResult.SourceAddress.IPv4Address
+            }
+        }
+        "natted"{
+            $testResult = VerifyConnection $serverAddress $port
+            if($testResult.TcpTestSucceeded){
+                $downloader = new-object System.Net.WebClient
+                $ipAddress = $downloader.DownloadString("http://icanhazip.com").Trim()
+            }
+        }
+    }
+
+    Return $ipAddress
+}
+<#function Get-MyPublicIPAddress([string]$RegisteredNic,[bool]$isNatted,[string]$OctopusServerUrl){
+    
+    $downloader = new-object System.Net.WebClient
     #First Verify the adapter exists
     $netAdapter = Get-NetAdapter -InterfaceAlias $RegisteredNic -ErrorAction SilentlyContinue
-    if($netAdapter -eq $null){
+    if($netAdapter -eq $null -and $RegisteredNic -ne "AWSNIC"){
         throw "Selected NIC $($RegisteredNic) does not exist"
     }
 
     #If adapter is natted, find the actual Public IP
     if($isNatted){
         Write-Verbose "NIC $($RegisteredNic) is natted. Determining actual public IP"
-        $downloader = new-object System.Net.WebClient
         $ip = $downloader.DownloadString("http://icanhazip.com").Trim()
     }
+    #If this is an AWS Server, using the AWSNIC as your interface name will direct this resource to scrape the machine's metadata for the local IP
+    elseif($RegisteredNic -eq "AWSNIC"){
+        Write-Verbose "Getting IP Address from AWS metadata."
+        $ip = $downloader.DownloadString("http://169.254.169.254/latest/meta-data/local-ipv4").Trim()
+        Write-Verbose "Metadata returned $($ip) as this machine's IP Address."
+    }
+    #Otherwise if you know the name of your network interface, this resource will get the IP of the interface that matches the interface name you provided.
     else{
         Write-Verbose "Getting IP address of $($RegisteredNic) NIC"
         $ip = Get-NetIPAddress -InterfaceAlias $RegisteredNic -AddressFamily IPv4 | select -exp IPAddress
     }
 
     #Test the connection to the Octopus Server. If it is not reachable, throw an error
-    $urlRegex = ‘([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?’
+    #$urlRegex = ï¿½([a-zA-Z]{3,})://([\w-]+\.)+[\w-]+(/[\w- ./?%&=]*)*?ï¿½
+    $urlRegex = "(http[s]?|[s]?ftp[s]?)(:\/\/)([^\s,]+)"
     if($OctopusServerUrl -match $urlRegex){
         $OctopusServerUrl = $OctopusServerUrl.Split("//") | select -Last 1
     }
-    $adapterTest = Test-NetConnection $OctopusServerUrl -Port $port
-    if(!($adapterTest.TcpTestSucceeded -and ($adapterTest.InterfaceAlias -eq $RegisteredNic))){
+    if($OctopusServerUrl.Contains(":")){
+        $port = $OctopusServerUrl.Split(":")[1]
+        $OctopusServerUrl = $OctopusServerUrl.Split(":")[0]
+        $adapterTest = Test-NetConnection $OctopusServerUrl -port $port -InformationLevel Detailed
+        $testResult = $adapterTest.TcpTestSucceeded
+    }
+    else{
+        $adapterTest = Test-NetConnection $OctopusServerUrl HTTP -InformationLevel Detailed
+        $testResult = $adapterTest.TcpTestSucceeded
+    }
+    Write-Verbose "The connection test to $($OctopusServerUrl) from $($ip) using the $($RegisteredNic) interface returned: $($testResult)."
+    if(!($testResult -and (($adapterTest.InterfaceAlias -eq $RegisteredNic) -or $RegisteredNic -eq "AWSNIC"))){
         throw "Cannot reach Octopus Server $($OctopusServerUrl) from Network $($RegisteredNic). Please check your connection and try running your configuration again"
     }
     else{return $ip}
-}
+}#>
  
-function New-Tentacle 
-{
+function New-Tentacle{
     param (
         [Parameter(Mandatory=$True)]
         [string]$name,
@@ -272,48 +351,30 @@ function New-Tentacle
         [Parameter(Mandatory=$True)]
         [string[]]$roles,
         [int] $port,
-        [string]$RegisteredNic,
-        [bool]$isNatted=$false,
+        [ValidateSet("named","detect","natted")]
+        $nicType="detect",
+        $nicName=$null,
+        #[string]$RegisteredNic,
+        #[bool]$isNatted=$false,
         [string]$DefaultApplicationDirectory
     )
  
-    if ($port -eq 0) 
-    {
+    if ($port -eq 0){
         $port = 10933
     }
 
     Write-Verbose "Beginning Tentacle installation" 
-  
-    $tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle64"
-    if ([IntPtr]::Size -eq 4) 
-    {
-        $tentacleDownloadUrl = "http://octopusdeploy.com/downloads/latest/OctopusTentacle"
-    }
-
-    mkdir "$($env:SystemDrive)\Octopus" -ErrorAction SilentlyContinue
-
-    $tentaclePath = "$($env:SystemDrive)\Octopus\Tentacle.msi"
-    if ((test-path $tentaclePath) -ne $true) 
-    {
-        Write-Verbose "Downloading latest Octopus Tentacle MSI from $tentacleDownloadUrl to $tentaclePath"
-        Request-File $tentacleDownloadUrl $tentaclePath
-    }
-  
-    Write-Verbose "Installing MSI..."
-    $msiLog = "$($env:SystemDrive)\Octopus\Tentacle.msi.log"
-    $msiExitCode = (Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $tentaclePath /quiet /l*v $msiLog" -Wait -Passthru).ExitCode
-    Write-Verbose "Tentacle MSI installer returned exit code $msiExitCode"
-    if ($msiExitCode -ne 0) 
-    {
-        throw "Installation of the Tentacle MSI failed; MSIEXEC exited with code: $msiExitCode. View the log at $msiLog"
-    }
  
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl -port $port
+    #$ipAddress = Get-MyPublicIPAddress -RegisteredNic $RegisteredNic -isNatted $isNatted -OctopusServerUrl $octopusServerUrl
+    $ipAddress = Get-RegistrationIP -nicType $nicType -nicName $nicName -url $octopusServerUrl    
+    if($ipAddress -eq $null){
+        throw "I don't have an IP Address to register with"
+    }
  
-    Write-Verbose "Public IP address: $ipAddress"
+    Write-Verbose "Public IP address: $($ipAddress)"
     Write-Verbose "Configuring and registering Tentacle"
   
     pushd "${env:ProgramFiles}\Octopus Deploy\Tentacle"
@@ -330,18 +391,14 @@ function New-Tentacle
 
     $registerArguments = @("register-with", "--instance", $name, "--server", $octopusServerUrl, "--name", $env:COMPUTERNAME, "--publicHostName", $ipAddress, "--apiKey", $apiKey, "--comms-style", "TentaclePassive", "--force", "--console")
 
-    foreach ($environment in $environments) 
-    {
-        foreach ($e2 in $environment.Split(',')) 
-        {
+    foreach ($environment in $environments){
+        foreach ($e2 in $environment.Split(',')){
             $registerArguments += "--environment"
             $registerArguments += $e2.Trim()
         }
     }
-    foreach ($role in $roles) 
-    {
-        foreach ($r2 in $role.Split(',')) 
-        {
+    foreach ($role in $roles){
+        foreach ($r2 in $role.Split(',')){
             $registerArguments += "--role"
             $registerArguments += $r2.Trim()
         }
@@ -355,8 +412,7 @@ function New-Tentacle
 }
 
 
-function Remove-TentacleRegistration 
-{
+function Remove-TentacleRegistration{
     param (
         [Parameter(Mandatory=$True)]
         [string]$name,
@@ -367,16 +423,14 @@ function Remove-TentacleRegistration
     )
   
     $tentacleDir = "${env:ProgramFiles}\Octopus Deploy\Tentacle"
-    if ((test-path $tentacleDir) -and (test-path "$tentacleDir\tentacle.exe")) 
-    {
+    if ((test-path $tentacleDir) -and (test-path "$tentacleDir\tentacle.exe")){
         Write-Verbose "Beginning Tentacle deregistration" 
         Write-Verbose "Tentacle commands complete"
         pushd $tentacleDir
         Invoke-AndAssert { & .\tentacle.exe deregister-from --instance "$name" --server $octopusServerUrl --apiKey $apiKey --console }
         popd
     }
-    else 
-    {
+    else{
         Write-Verbose "Could not find Tentacle.exe"
     }
 }
